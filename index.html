@@ -60,44 +60,74 @@
   draw();
 
   var recognition = null;
+  var finalTranscript = '';
+  var silenceTimer = null;
+  var SILENCE_MS = 2800;   // pausa tolerada entre palabras/frases antes de dar por terminado
+  var INITIAL_GRACE_MS = 6000; // tiempo de gracia inicial si aún no ha dicho nada
 
   if ('webkitSpeechRecognition' in window) {
     recognition = new webkitSpeechRecognition();
     recognition.lang = 'es-ES';
-    recognition.continuous = false;
+    recognition.continuous = true;      // no corta en la primera pausa
     recognition.interimResults = true;
 
-    recognition.onresult = function(event) {
-      var result = event.results[0];
-      transcriptEl.textContent = result[0].transcript;
-      if (result.isFinal) {
-        state = 'done';
-        statusEl.textContent = 'ENVIANDO...';
-        var text = result[0].transcript;
-        if (window.opener) {
-          window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
-        }
-        setTimeout(function() { window.close(); }, 500);
+    function resetSilenceTimer(ms) {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(finishAndSend, ms);
+    }
+
+    function finishAndSend() {
+      if (state !== 'listening') return;
+      state = 'done';
+      try { recognition.stop(); } catch (e) {}
+
+      var text = finalTranscript.trim();
+      if (!text) {
+        statusEl.textContent = 'NO SE DETECTÓ VOZ';
+        setTimeout(function() { window.close(); }, 1000);
+        return;
       }
+      statusEl.textContent = 'ENVIANDO...';
+      if (window.opener) {
+        window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
+      }
+      setTimeout(function() { window.close(); }, 400);
+    }
+
+    recognition.onresult = function(event) {
+      var interim = '';
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        var transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+      transcriptEl.textContent = (finalTranscript + interim).trim();
+      resetSilenceTimer(SILENCE_MS); // cada vez que detecta algo, alarga el plazo
     };
 
     recognition.onerror = function(e) {
+      if (e.error === 'no-speech') {
+        // Chrome a veces dispara esto de forma espuria en modo continuo; lo ignoramos y seguimos
+        return;
+      }
       state = 'error';
       statusEl.textContent = 'ERROR: ' + e.error;
-      draw(); // un último frame en rojo
       setTimeout(function() { window.close(); }, 2000);
     };
 
     recognition.onend = function() {
+      // Si el navegador la para sola (p. ej. límite interno) y aún estábamos escuchando, cerramos con lo que tengamos
       if (state === 'listening') {
-        // Terminó sin resultado (silencio, etc.)
-        statusEl.textContent = 'NO SE DETECTÓ VOZ';
-        setTimeout(function() { window.close(); }, 1200);
+        finishAndSend();
       }
     };
 
     // Arranca automáticamente, sin necesitar clic
     recognition.start();
+    resetSilenceTimer(INITIAL_GRACE_MS);
   } else {
     statusEl.textContent = 'NO SOPORTADO EN ESTE NAVEGADOR';
   }
