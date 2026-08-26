@@ -1,51 +1,105 @@
-<div id="jarvisMicRoot" style="font-family: Arial, sans-serif; text-align: center; padding: 30px; background: #04070c; color: #e6f1ff; min-height: 100vh; box-sizing: border-box;">
-  <h2 style="color: #00d4ff; letter-spacing: 2px;">JARVIS · Micrófono</h2>
-  <p id="micStatus" style="color: #4a6a84; font-size: 14px;">Pulsa el botón y habla</p>
-  <button id="micButton" style="font-size: 40px; width: 120px; height: 120px; border-radius: 50%; border: none; background: #00d4ff; cursor: pointer;">🎤</button>
-  <p id="micTranscript" style="margin-top: 20px; font-size: 16px; min-height: 24px;"></p>
+<div id="jarvisMicRoot" style="font-family: Arial, sans-serif; text-align: center; padding: 0; background: radial-gradient(circle at 50% 40%, #0a1420 0%, #04070c 75%); color: #e6f1ff; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; overflow: hidden;">
+  <canvas id="micCanvas" width="220" height="220"></canvas>
+  <p id="micStatus" style="color: #00d4ff; font-size: 13px; letter-spacing: 2px; margin-top: 4px;">ESCUCHANDO</p>
+  <p id="micTranscript" style="margin-top: 10px; font-size: 15px; min-height: 22px; color: #cfe9f5; padding: 0 20px;"></p>
 </div>
 
 <script>
 (function() {
   var statusEl = document.getElementById('micStatus');
   var transcriptEl = document.getElementById('micTranscript');
-  var buttonEl = document.getElementById('micButton');
+  var canvas = document.getElementById('micCanvas');
+  var ctx = canvas.getContext('2d');
+  var CX = 110, CY = 110;
+  var t = 0;
+  var amplitude = 0.3;
+  var state = 'listening'; // listening | error | done
+
+  function draw() {
+    ctx.clearRect(0, 0, 220, 220);
+    amplitude += (Math.random() * 0.5 - 0.1) * 0.15; // jitter simulando actividad de voz
+    amplitude = Math.max(0.2, Math.min(1, amplitude));
+
+    var color = state === 'error' ? { r: 255, g: 80, b: 80 } : { r: 255, g: 60, b: 60 };
+    var radius = 38 + Math.sin(t * 0.15) * 5 + amplitude * 18;
+
+    // Anillos pulsantes
+    for (var i = 0; i < 3; i++) {
+      var ringR = radius + 18 + i * 14 + Math.sin(t * 0.08 + i) * 4;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + (0.22 - i * 0.06) + ')';
+      ctx.lineWidth = 2;
+      ctx.arc(CX, CY, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Halo
+    var grad = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius * 2);
+    grad.addColorStop(0, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.4)');
+    grad.addColorStop(1, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(CX, CY, radius * 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Núcleo
+    var core = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius);
+    core.addColorStop(0, '#ffffff');
+    core.addColorStop(0.35, 'rgb(' + color.r + ',' + color.g + ',' + color.b + ')');
+    core.addColorStop(1, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.2)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(CX, CY, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    t++;
+    if (state === 'listening') {
+      requestAnimationFrame(draw);
+    }
+  }
+  draw();
+
   var recognition = null;
 
   if ('webkitSpeechRecognition' in window) {
     recognition = new webkitSpeechRecognition();
     recognition.lang = 'es-ES';
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
 
     recognition.onresult = function(event) {
-      var text = event.results[0][0].transcript;
-      transcriptEl.textContent = text;
-      statusEl.textContent = 'Enviando a JARVIS...';
-      if (window.opener) {
-        window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
+      var result = event.results[0];
+      transcriptEl.textContent = result[0].transcript;
+      if (result.isFinal) {
+        state = 'done';
+        statusEl.textContent = 'ENVIANDO...';
+        var text = result[0].transcript;
+        if (window.opener) {
+          window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
+        }
+        setTimeout(function() { window.close(); }, 500);
       }
-      setTimeout(function() { window.close(); }, 600);
     };
 
     recognition.onerror = function(e) {
-      statusEl.textContent = 'Error: ' + e.error;
-      buttonEl.style.background = '#00d4ff';
+      state = 'error';
+      statusEl.textContent = 'ERROR: ' + e.error;
+      draw(); // un último frame en rojo
+      setTimeout(function() { window.close(); }, 2000);
     };
 
     recognition.onend = function() {
-      buttonEl.style.background = '#00d4ff';
+      if (state === 'listening') {
+        // Terminó sin resultado (silencio, etc.)
+        statusEl.textContent = 'NO SE DETECTÓ VOZ';
+        setTimeout(function() { window.close(); }, 1200);
+      }
     };
-  } else {
-    statusEl.textContent = 'Este navegador no soporta reconocimiento de voz.';
-  }
 
-  buttonEl.addEventListener('click', function() {
-    if (!recognition) return;
-    statusEl.textContent = 'Escuchando...';
-    transcriptEl.textContent = '';
-    buttonEl.style.background = '#ff3b3b';
+    // Arranca automáticamente, sin necesitar clic
     recognition.start();
-  });
+  } else {
+    statusEl.textContent = 'NO SOPORTADO EN ESTE NAVEGADOR';
+  }
 })();
 </script>
