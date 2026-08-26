@@ -1,0 +1,51 @@
+<div id="jarvisMicRoot" style="font-family: Arial, sans-serif; text-align: center; padding: 30px; background: #04070c; color: #e6f1ff; min-height: 100vh; box-sizing: border-box;">
+  <h2 style="color: #00d4ff; letter-spacing: 2px;">JARVIS · Micrófono</h2>
+  <p id="micStatus" style="color: #4a6a84; font-size: 14px;">Pulsa el botón y habla</p>
+  <button id="micButton" style="font-size: 40px; width: 120px; height: 120px; border-radius: 50%; border: none; background: #00d4ff; cursor: pointer;">🎤</button>
+  <p id="micTranscript" style="margin-top: 20px; font-size: 16px; min-height: 24px;"></p>
+</div>
+
+<script>
+(function() {
+  var statusEl = document.getElementById('micStatus');
+  var transcriptEl = document.getElementById('micTranscript');
+  var buttonEl = document.getElementById('micButton');
+  var recognition = null;
+
+  if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = function(event) {
+      var text = event.results[0][0].transcript;
+      transcriptEl.textContent = text;
+      statusEl.textContent = 'Enviando a JARVIS...';
+      if (window.opener) {
+        window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
+      }
+      setTimeout(function() { window.close(); }, 600);
+    };
+
+    recognition.onerror = function(e) {
+      statusEl.textContent = 'Error: ' + e.error;
+      buttonEl.style.background = '#00d4ff';
+    };
+
+    recognition.onend = function() {
+      buttonEl.style.background = '#00d4ff';
+    };
+  } else {
+    statusEl.textContent = 'Este navegador no soporta reconocimiento de voz.';
+  }
+
+  buttonEl.addEventListener('click', function() {
+    if (!recognition) return;
+    statusEl.textContent = 'Escuchando...';
+    transcriptEl.textContent = '';
+    buttonEl.style.background = '#ff3b3b';
+    recognition.start();
+  });
+})();
+</script>
