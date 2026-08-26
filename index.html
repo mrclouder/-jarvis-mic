@@ -1,574 +1,105 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <base target="_top">
-  <style>
-    * { box-sizing: border-box; }
-    html, body {
-      height: 100%;
-      margin: 0;
-    }
-    body {
-      font-family: 'Segoe UI', Arial, sans-serif;
-      background: radial-gradient(circle at 50% 30%, #0a1420 0%, #04070c 70%);
-      color: #e6f1ff;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    h1 {
-      text-align: center;
-      color: #00d4ff;
-      letter-spacing: 4px;
-      font-size: 18px;
-      margin: 0 0 2px 0;
-      text-shadow: 0 0 12px rgba(0,212,255,0.6);
-    }
-    .subtitle {
-      text-align: center;
-      color: #4a6a84;
-      font-size: 11px;
-      margin-bottom: 6px;
-      letter-spacing: 1px;
+<div id="jarvisMicRoot" style="font-family: Arial, sans-serif; text-align: center; padding: 8px 0; background: radial-gradient(circle at 50% 40%, #0a1420 0%, #04070c 75%); color: #e6f1ff; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; overflow: hidden;">
+  <canvas id="micCanvas" width="130" height="130"></canvas>
+  <p id="micStatus" style="color: #00d4ff; font-size: 10px; letter-spacing: 1.5px; margin: 4px 0 2px;">ESCUCHANDO</p>
+  <p id="micTranscript" style="margin-top: 2px; font-size: 11px; min-height: 14px; color: #cfe9f5; padding: 0 8px; line-height: 1.2;"></p>
+</div>
+
+<script>
+(function() {
+  var statusEl = document.getElementById('micStatus');
+  var transcriptEl = document.getElementById('micTranscript');
+  var canvas = document.getElementById('micCanvas');
+  var ctx = canvas.getContext('2d');
+  var CX = 65, CY = 65;
+  var t = 0;
+  var amplitude = 0.3;
+  var state = 'listening'; // listening | error | done
+
+  function draw() {
+    ctx.clearRect(0, 0, 130, 130);
+    amplitude += (Math.random() * 0.5 - 0.1) * 0.15; // jitter simulando actividad de voz
+    amplitude = Math.max(0.2, Math.min(1, amplitude));
+
+    var color = state === 'error' ? { r: 255, g: 80, b: 80 } : { r: 255, g: 60, b: 60 };
+    var radius = 22 + Math.sin(t * 0.15) * 3 + amplitude * 11;
+
+    // Anillos pulsantes
+    for (var i = 0; i < 3; i++) {
+      var ringR = radius + 10 + i * 8 + Math.sin(t * 0.08 + i) * 2.5;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + (0.22 - i * 0.06) + ')';
+      ctx.lineWidth = 2;
+      ctx.arc(CX, CY, ringR, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
-    /* ---- NÚCLEO ANIMADO ---- */
-    #orbWrap {
-      position: relative;
-      width: 100%;
-      height: 190px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    #orbCanvas {
-      display: block;
-    }
-    #stateLabel {
-      position: absolute;
-      bottom: 4px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 10px;
-      letter-spacing: 2px;
-      color: #4a90a8;
-      text-transform: uppercase;
-    }
+    // Halo
+    var grad = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius * 2);
+    grad.addColorStop(0, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.4)');
+    grad.addColorStop(1, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(CX, CY, radius * 2, 0, Math.PI * 2);
+    ctx.fill();
 
-    /* ---- CHAT ---- */
-    #chatBox {
-      flex: 1;
-      overflow-y: auto;
-      border: 1px solid #142838;
-      border-radius: 10px;
-      padding: 12px;
-      background: rgba(8, 14, 22, 0.6);
-      margin-bottom: 10px;
-      backdrop-filter: blur(2px);
-    }
-    .msg {
-      margin: 8px 0;
-      padding: 10px 14px;
-      border-radius: 8px;
-      max-width: 82%;
-      line-height: 1.4;
-      font-size: 14px;
-      animation: fadeIn 0.25s ease-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .user {
-      background: #12283a;
-      margin-left: auto;
-      text-align: right;
-      border: 1px solid #1c3a50;
-    }
-    .jarvis {
-      background: #07211a;
-      border-left: 2px solid #00d4ff;
-      white-space: pre-line;
-    }
+    // Núcleo
+    var core = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius);
+    core.addColorStop(0, '#ffffff');
+    core.addColorStop(0.35, 'rgb(' + color.r + ',' + color.g + ',' + color.b + ')');
+    core.addColorStop(1, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.2)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(CX, CY, radius, 0, Math.PI * 2);
+    ctx.fill();
 
-    .controls {
-      display: flex;
-      gap: 8px;
+    t++;
+    if (state === 'listening') {
+      requestAnimationFrame(draw);
     }
-    #inputText {
-      flex: 1;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid #142838;
-      background: #0a121c;
-      color: #e6f1ff;
-      font-size: 14px;
-    }
-    #inputText:focus {
-      outline: none;
-      border-color: #00d4ff;
-    }
-    button {
-      padding: 12px 16px;
-      border-radius: 8px;
-      border: none;
-      background: #00d4ff;
-      color: #04070c;
-      font-weight: bold;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    button:hover { background: #33ddff; }
-    #micBtn.listening {
-      background: #ff3b3b;
-      box-shadow: 0 0 16px rgba(255,59,59,0.7);
-    }
-    .status {
-      text-align: center;
-      font-size: 11px;
-      color: #4a6a84;
-      margin-top: 6px;
-    }
-    #bootOverlay {
-      position: fixed;
-      inset: 0;
-      background: #04070c;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 999;
-      cursor: pointer;
-      transition: opacity 0.6s ease;
-    }
-    #bootOverlay h2 {
-      color: #00d4ff;
-      letter-spacing: 6px;
-      font-size: 22px;
-      text-shadow: 0 0 16px rgba(0,212,255,0.7);
-      margin-bottom: 12px;
-    }
-    #bootOverlay p {
-      color: #4a6a84;
-      font-size: 12px;
-      letter-spacing: 2px;
-      animation: blink 1.6s infinite;
-    }
-    @keyframes blink {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 1; }
-    }
-  </style>
-</head>
-<body>
-  <div id="bootOverlay" onclick="bootUp()">
-    <h2>J.A.R.V.I.S</h2>
-    <p>PULSA PARA INICIAR SISTEMAS</p>
-  </div>
+  }
+  draw();
 
-  <h1>J.A.R.V.I.S</h1>
-  <div class="subtitle">Powered by Gemini · Apps Script</div>
+  var recognition = null;
 
-  <div id="orbWrap">
-    <canvas id="orbCanvas" width="300" height="190"></canvas>
-    <div id="stateLabel">En reposo</div>
-  </div>
+  if ('webkitSpeechRecognition' in window) {
+    recognition = new webkitSpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.continuous = false;
+    recognition.interimResults = true;
 
-  <div id="chatBox"></div>
-
-  <div class="controls">
-    <input type="text" id="inputText" placeholder="Escribe o pulsa el micro..." onkeypress="if(event.key==='Enter') sendMessage()">
-    <button id="micBtn" onclick="toggleMic()">🎤</button>
-    <button onclick="sendMessage()">Enviar</button>
-  </div>
-  <div class="status" id="status">Listo</div>
-
-  <script>
-    // ============================================================
-    // SONIDO DE ARRANQUE (sintetizado, sin copyright — no es la música de Iron Man)
-    // ============================================================
-    function playBootSound(ctx) {
-      const now = ctx.currentTime;
-      const masterGain = ctx.createGain();
-      masterGain.gain.setValueAtTime(0, now);
-      masterGain.connect(ctx.destination);
-
-      // Barrido ascendente (0s - 2.8s)
-      const sweep = ctx.createOscillator();
-      sweep.type = 'sine';
-      sweep.frequency.setValueAtTime(140, now);
-      sweep.frequency.exponentialRampToValueAtTime(720, now + 2.8);
-      const sweepGain = ctx.createGain();
-      sweepGain.gain.setValueAtTime(0, now);
-      sweepGain.gain.linearRampToValueAtTime(0.15, now + 0.4);
-      sweepGain.gain.linearRampToValueAtTime(0.08, now + 2.8);
-      sweep.connect(sweepGain);
-      sweepGain.connect(masterGain);
-      sweep.start(now);
-      sweep.stop(now + 2.9);
-
-      // Un segundo tono más grave por debajo, para dar cuerpo
-      const sub = ctx.createOscillator();
-      sub.type = 'triangle';
-      sub.frequency.setValueAtTime(70, now);
-      sub.frequency.exponentialRampToValueAtTime(180, now + 2.8);
-      const subGain = ctx.createGain();
-      subGain.gain.setValueAtTime(0, now);
-      subGain.gain.linearRampToValueAtTime(0.1, now + 0.4);
-      subGain.gain.linearRampToValueAtTime(0.04, now + 2.8);
-      sub.connect(subGain);
-      subGain.connect(masterGain);
-      sub.start(now);
-      sub.stop(now + 2.9);
-
-      // Acorde tipo "power-up" al final (2.6s - 5s)
-      const chordFreqs = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
-      chordFreqs.forEach(function(freq, i) {
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + 2.6);
-        const g = ctx.createGain();
-        const startT = now + 2.6 + i * 0.08;
-        g.gain.setValueAtTime(0, startT);
-        g.gain.linearRampToValueAtTime(0.09, startT + 0.15);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 5);
-        osc.connect(g);
-        g.connect(masterGain);
-        osc.start(startT);
-        osc.stop(now + 5.1);
-      });
-
-      // Envolvente general (evita clicks al principio/final)
-      masterGain.gain.linearRampToValueAtTime(1, now + 0.05);
-      masterGain.gain.setValueAtTime(1, now + 4.7);
-      masterGain.gain.linearRampToValueAtTime(0, now + 5);
-    }
-
-    function bootUp() {
-      const overlay = document.getElementById('bootOverlay');
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      playBootSound(ctx);
-
-      // El orbe "respira" con más intensidad durante el arranque
-      setOrbState('thinking');
-      setTimeout(function() { setOrbState('idle'); }, 5000);
-
-      overlay.style.opacity = '0';
-      setTimeout(function() {
-        overlay.style.display = 'none';
-      }, 600);
-    }
-
-    // ============================================================
-    // NÚCLEO ANIMADO (canvas)
-    // ============================================================
-    const canvas = document.getElementById('orbCanvas');
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    const CX = W / 2, CY = H / 2;
-
-    // Estados: 'idle', 'listening', 'thinking', 'speaking'
-    let orbState = 'idle';
-    let speakAmplitude = 0; // 0-1, modulado por onboundary del TTS
-    let targetAmplitude = 0;
-    let t = 0;
-
-    const STATE_COLORS = {
-      idle:      { r: 0,   g: 160, b: 200 },
-      listening: { r: 20,  g: 60,  b: 90  }, // atenuado: la "voz" real la lleva la burbuja del micro
-      thinking:  { r: 255, g: 170, b: 40  },
-      speaking:  { r: 0,   g: 212, b: 255 }
+    recognition.onresult = function(event) {
+      var result = event.results[0];
+      transcriptEl.textContent = result[0].transcript;
+      if (result.isFinal) {
+        state = 'done';
+        statusEl.textContent = 'ENVIANDO...';
+        var text = result[0].transcript;
+        if (window.opener) {
+          window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
+        }
+        setTimeout(function() { window.close(); }, 500);
+      }
     };
 
-    function setOrbState(state) {
-      orbState = state;
-      const labels = { idle: 'En reposo', listening: 'Escuchando', thinking: 'Procesando', speaking: 'Hablando' };
-      document.getElementById('stateLabel').textContent = labels[state] || state;
-    }
+    recognition.onerror = function(e) {
+      state = 'error';
+      statusEl.textContent = 'ERROR: ' + e.error;
+      draw(); // un último frame en rojo
+      setTimeout(function() { window.close(); }, 2000);
+    };
 
-    function drawOrb() {
-      ctx.clearRect(0, 0, W, H);
-      const c = STATE_COLORS[orbState];
-      const colorStr = 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')';
-
-      // Suavizar amplitud hacia el objetivo
-      speakAmplitude += (targetAmplitude - speakAmplitude) * 0.15;
-      targetAmplitude *= 0.9; // decaimiento natural
-
-      let baseRadius = 42;
-      let pulse = 0;
-
-      if (orbState === 'idle') {
-        pulse = Math.sin(t * 0.03) * 4;
-      } else if (orbState === 'listening') {
-        pulse = Math.sin(t * 0.25) * 8 + speakAmplitude * 20;
-      } else if (orbState === 'thinking') {
-        pulse = Math.sin(t * 0.15) * 6;
-      } else if (orbState === 'speaking') {
-        pulse = speakAmplitude * 22 + Math.sin(t * 0.2) * 3;
+    recognition.onend = function() {
+      if (state === 'listening') {
+        // Terminó sin resultado (silencio, etc.)
+        statusEl.textContent = 'NO SE DETECTÓ VOZ';
+        setTimeout(function() { window.close(); }, 1200);
       }
+    };
 
-      const radius = baseRadius + pulse;
-
-      // Anillos exteriores rotando
-      const ringCount = 3;
-      for (let i = 0; i < ringCount; i++) {
-        const ringRadius = radius + 20 + i * 16;
-        const rotSpeed = orbState === 'thinking' ? 0.04 : 0.015;
-        const dir = i % 2 === 0 ? 1 : -1;
-        const startAngle = t * rotSpeed * dir + i * 2;
-
-        ctx.beginPath();
-        ctx.strokeStyle = colorStr;
-        ctx.globalAlpha = 0.18 - i * 0.04;
-        ctx.lineWidth = 1.5;
-        ctx.arc(CX, CY, ringRadius, startAngle, startAngle + Math.PI * 1.3);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-
-      // Halo (glow)
-      const gradient = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius * 2.2);
-      gradient.addColorStop(0, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0.35)');
-      gradient.addColorStop(1, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0)');
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.arc(CX, CY, radius * 2.2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Núcleo central
-      const coreGradient = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius);
-      coreGradient.addColorStop(0, '#ffffff');
-      coreGradient.addColorStop(0.3, colorStr);
-      coreGradient.addColorStop(1, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0.15)');
-      ctx.fillStyle = coreGradient;
-      ctx.beginPath();
-      ctx.arc(CX, CY, radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Puntitos orbitando (partículas)
-      const particleCount = 6;
-      for (let i = 0; i < particleCount; i++) {
-        const angle = (t * 0.02) + (i * (Math.PI * 2 / particleCount));
-        const orbitRadius = radius + 34;
-        const px = CX + Math.cos(angle) * orbitRadius;
-        const py = CY + Math.sin(angle) * orbitRadius * 0.6; // elipse
-        ctx.beginPath();
-        ctx.fillStyle = colorStr;
-        ctx.globalAlpha = 0.7;
-        ctx.arc(px, py, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      t++;
-      requestAnimationFrame(drawOrb);
-    }
-    drawOrb();
-
-    // ============================================================
-    // RECONOCIMIENTO DE VOZ (vía ventana emergente externa, porque el
-    // iframe de Apps Script bloquea el acceso directo al micrófono)
-    // ============================================================
-    let history = [];
-    let listening = false;
-    let micPopup = null;
-
-    const MIC_HELPER_URL = 'https://mrclouder.github.io/-jarvis-mic/';
-
-    // Escucha el mensaje que manda la ventana emergente cuando termina de transcribir
-    window.addEventListener('message', function(event) {
-      if (event.data && event.data.type === 'jarvis-voice') {
-        listening = false;
-        document.getElementById('micBtn').classList.remove('listening');
-        setOrbState('idle');
-        setStatus('Listo');
-        document.getElementById('inputText').value = event.data.text;
-        sendMessage();
-      }
-    });
-
-    function toggleMic() {
-      if (listening) {
-        if (micPopup && !micPopup.closed) micPopup.close();
-        listening = false;
-        document.getElementById('micBtn').classList.remove('listening');
-        setOrbState('idle');
-        setStatus('Listo');
-        return;
-      }
-
-      const micBtnRect = document.getElementById('micBtn').getBoundingClientRect();
-      const popupWidth = 170;
-      const popupHeight = 190;
-      // La colocamos justo encima del botón del micro, pegada
-      const left = window.screenX + micBtnRect.left - (popupWidth - micBtnRect.width) / 2;
-      const top = window.screenY + micBtnRect.top - popupHeight - 10;
-      const features = 'width=' + popupWidth + ',height=' + popupHeight +
-        ',left=' + Math.round(left) + ',top=' + Math.round(top) +
-        ',toolbar=no,menubar=no,location=no,status=no,scrollbars=no,resizable=no';
-
-      micPopup = window.open(MIC_HELPER_URL, 'jarvis_mic', features);
-
-      if (!micPopup) {
-        alert('El navegador bloqueó la ventana emergente. Permite pop-ups para este sitio y vuelve a intentarlo.');
-        return;
-      }
-
-      listening = true;
-      document.getElementById('micBtn').classList.add('listening');
-      setOrbState('listening');
-      setStatus('Escuchando en ventana emergente...');
-
-      // Si el usuario cierra la ventana manualmente sin hablar, resetea el estado
-      const checkClosed = setInterval(function() {
-        if (micPopup.closed) {
-          clearInterval(checkClosed);
-          listening = false;
-          document.getElementById('micBtn').classList.remove('listening');
-          setOrbState('idle');
-          setStatus('Listo');
-        }
-      }, 500);
-    }
-
-    // ============================================================
-    // SÍNTESIS DE VOZ (ElevenLabs, con reactividad real del orbe)
-    // ============================================================
-    let audioCtx = null;
-    let analyser = null;
-    let audioDataArray = null;
-    let currentAudioEl = null;
-    let visualizeLoopActive = false;
-
-    function ensureAudioContext() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-      if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-      }
-    }
-
-    function visualizeAudioLoop() {
-      if (!visualizeLoopActive || !analyser) return;
-      analyser.getByteFrequencyData(audioDataArray);
-      // Promedio de las frecuencias medias/bajas (donde vive la voz)
-      let sum = 0;
-      const range = Math.min(audioDataArray.length, 48);
-      for (let i = 0; i < range; i++) sum += audioDataArray[i];
-      const avg = sum / range / 255; // normalizado 0-1
-      targetAmplitude = avg;
-      requestAnimationFrame(visualizeAudioLoop);
-    }
-
-    function speak(text) {
-      setOrbState('thinking'); // mientras se genera el audio
-      google.script.run
-        .withSuccessHandler(function(result) {
-          if (!result || !result.success) {
-            console.warn('ElevenLabs falló, usando voz del navegador de respaldo:', result && result.error);
-            speakFallbackBrowser(text);
-            return;
-          }
-          playAudioFromBase64(result.audioBase64, result.mimeType);
-        })
-        .withFailureHandler(function(err) {
-          console.warn('Error llamando a synthesizeSpeech, usando voz del navegador:', err);
-          speakFallbackBrowser(text);
-        })
-        .synthesizeSpeech(text);
-    }
-
-    function playAudioFromBase64(base64, mimeType) {
-      ensureAudioContext();
-
-      const audioSrc = 'data:' + mimeType + ';base64,' + base64;
-      const audioEl = new Audio(audioSrc);
-      currentAudioEl = audioEl;
-
-      // Conectar al analizador para amplitud real
-      const source = audioCtx.createMediaElementSource(audioEl);
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 128;
-      audioDataArray = new Uint8Array(analyser.frequencyBinCount);
-      source.connect(analyser);
-      analyser.connect(audioCtx.destination);
-
-      audioEl.onplay = function() {
-        setOrbState('speaking');
-        visualizeLoopActive = true;
-        visualizeAudioLoop();
-      };
-      audioEl.onended = function() {
-        visualizeLoopActive = false;
-        setOrbState('idle');
-      };
-      audioEl.onerror = function() {
-        visualizeLoopActive = false;
-        setOrbState('idle');
-      };
-
-      audioEl.play();
-    }
-
-    // Respaldo por si ElevenLabs no está configurado o falla
-    function speakFallbackBrowser(text) {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'es-ES';
-      utterance.rate = 1.05;
-      utterance.onstart = function() { setOrbState('speaking'); };
-      utterance.onboundary = function() { targetAmplitude = 1; };
-      utterance.onend = function() { setOrbState('idle'); };
-      window.speechSynthesis.speak(utterance);
-    }
-
-    // ============================================================
-    // CHAT
-    // ============================================================
-    function addMessage(text, sender) {
-      const box = document.getElementById('chatBox');
-      const div = document.createElement('div');
-      div.className = 'msg ' + sender;
-      div.textContent = text;
-      box.appendChild(div);
-      box.scrollTop = box.scrollHeight;
-    }
-
-    function setStatus(text) {
-      document.getElementById('status').textContent = text;
-    }
-
-    function sendMessage() {
-      const input = document.getElementById('inputText');
-      const text = input.value.trim();
-      if (!text) return;
-
-      addMessage(text, 'user');
-      input.value = '';
-      setStatus('JARVIS está pensando...');
-      setOrbState('thinking');
-
-      google.script.run
-        .withSuccessHandler(function(response) {
-          addMessage(response, 'jarvis');
-          speak(response);
-          history.push({ role: 'user', text: text });
-          history.push({ role: 'model', text: response });
-          setStatus('Listo');
-        })
-        .withFailureHandler(function(error) {
-          addMessage('Error: ' + error.message, 'jarvis');
-          setStatus('Error');
-          setOrbState('idle');
-        })
-        .askJarvis(text, history);
-    }
-
-    // Mensaje inicial
-    addMessage('Hola, soy JARVIS. ¿En qué puedo ayudarte?', 'jarvis');
-  </script>
-</body>
-</html>
+    // Arranca automáticamente, sin necesitar clic
+    recognition.start();
+  } else {
+    statusEl.textContent = 'NO SOPORTADO EN ESTE NAVEGADOR';
+  }
+})();
+</script>
