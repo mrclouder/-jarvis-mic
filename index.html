@@ -1,135 +1,750 @@
-<div id="jarvisMicRoot" style="font-family: Arial, sans-serif; text-align: center; padding: 8px 0; background: radial-gradient(circle at 50% 40%, #0a1420 0%, #04070c 75%); color: #e6f1ff; min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0; overflow: hidden;">
-  <canvas id="micCanvas" width="130" height="130"></canvas>
-  <p id="micStatus" style="color: #00d4ff; font-size: 10px; letter-spacing: 1.5px; margin: 4px 0 2px;">ESCUCHANDO</p>
-  <p id="micTranscript" style="margin-top: 2px; font-size: 11px; min-height: 14px; color: #cfe9f5; padding: 0 8px; line-height: 1.2;"></p>
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: radial-gradient(circle at 50% 30%, #0a1420 0%, #04070c 70%);
+      color: #e6f1ff;
+      padding: 16px;
+      display: flex;
+      flex-direction: row;
+      gap: 16px;
+      overflow: hidden;
+    }
+    #mainColumn {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #sidePanel {
+      width: 300px;
+      flex-shrink: 0;
+      display: none;
+      flex-direction: column;
+      border: 1px solid #142838;
+      border-radius: 10px;
+      background: rgba(8, 14, 22, 0.6);
+      overflow: hidden;
+    }
+    #sidePanel.visible { display: flex; }
+    #sidePanelHeader {
+      padding: 10px 14px;
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: #4a90a8;
+      text-transform: uppercase;
+      border-bottom: 1px solid #142838;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #sidePanelClose {
+      cursor: pointer;
+      color: #4a6a84;
+      font-size: 16px;
+      background: none;
+      border: none;
+      padding: 0 4px;
+    }
+    #sidePanelBody {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .panelCard {
+      background: #0a121c;
+      border: 1px solid #142838;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .panelCard .cardTitle {
+      color: #e6f1ff;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    .panelCard .cardMeta {
+      color: #6a8aa4;
+      font-size: 11px;
+    }
+    .panelCard .cardActions {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+    }
+    .panelCard button.cancelBtn {
+      background: #3a1616;
+      color: #ff8a8a;
+      border: 1px solid #7a2a2a;
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .panelCard button.cancelBtn:hover { background: #4a1e1e; }
+    .panelCard.removed { opacity: 0.4; pointer-events: none; }
+    h1 {
+      text-align: center;
+      color: #00d4ff;
+      letter-spacing: 4px;
+      font-size: 18px;
+      margin: 0 0 2px 0;
+      text-shadow: 0 0 12px rgba(0,212,255,0.6);
+    }
+    .subtitle {
+      text-align: center;
+      color: #4a6a84;
+      font-size: 11px;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
 
-<script>
-(function() {
-  var statusEl = document.getElementById('micStatus');
-  var transcriptEl = document.getElementById('micTranscript');
-  var canvas = document.getElementById('micCanvas');
-  var ctx = canvas.getContext('2d');
-  var CX = 65, CY = 65;
-  var t = 0;
-  var amplitude = 0.3;
-  var state = 'listening'; // listening | error | done
+    /* ---- NÚCLEO ANIMADO ---- */
+    #orbWrap {
+      position: relative;
+      width: 100%;
+      height: 190px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    #orbCanvas {
+      display: block;
+    }
+    #stateLabel {
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #4a90a8;
+      text-transform: uppercase;
+    }
 
-  function draw() {
-    ctx.clearRect(0, 0, 130, 130);
-    amplitude += (Math.random() * 0.5 - 0.1) * 0.15; // jitter simulando actividad de voz
-    amplitude = Math.max(0.2, Math.min(1, amplitude));
+    /* ---- CHAT ---- */
+    #chatBox {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid #142838;
+      border-radius: 10px;
+      padding: 12px;
+      background: rgba(8, 14, 22, 0.6);
+      margin-bottom: 10px;
+      backdrop-filter: blur(2px);
+    }
+    .msg {
+      margin: 8px 0;
+      padding: 10px 14px;
+      border-radius: 8px;
+      max-width: 82%;
+      line-height: 1.4;
+      font-size: 14px;
+      animation: fadeIn 0.25s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .user {
+      background: #12283a;
+      margin-left: auto;
+      text-align: right;
+      border: 1px solid #1c3a50;
+    }
+    .jarvis {
+      background: #07211a;
+      border-left: 2px solid #00d4ff;
+      white-space: pre-line;
+    }
 
-    var color = state === 'error' ? { r: 255, g: 80, b: 80 } : { r: 255, g: 60, b: 60 };
-    var radius = 22 + Math.sin(t * 0.15) * 3 + amplitude * 11;
+    .controls {
+      display: flex;
+      gap: 8px;
+    }
+    #inputText {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #142838;
+      background: #0a121c;
+      color: #e6f1ff;
+      font-size: 14px;
+    }
+    #inputText:focus {
+      outline: none;
+      border-color: #00d4ff;
+    }
+    button {
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: none;
+      background: #00d4ff;
+      color: #04070c;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button:hover { background: #33ddff; }
+    #micBtn.listening {
+      background: #ff3b3b;
+      box-shadow: 0 0 16px rgba(255,59,59,0.7);
+    }
+    .status {
+      text-align: center;
+      font-size: 11px;
+      color: #4a6a84;
+      margin-top: 6px;
+    }
+    #bootOverlay {
+      position: fixed;
+      inset: 0;
+      background: #04070c;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      cursor: pointer;
+      transition: opacity 0.6s ease;
+    }
+    #bootOverlay h2 {
+      color: #00d4ff;
+      letter-spacing: 6px;
+      font-size: 22px;
+      text-shadow: 0 0 16px rgba(0,212,255,0.7);
+      margin-bottom: 12px;
+    }
+    #bootOverlay p {
+      color: #4a6a84;
+      font-size: 12px;
+      letter-spacing: 2px;
+      animation: blink 1.6s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="bootOverlay" onclick="bootUp()">
+    <h2>J.A.R.V.I.S</h2>
+    <p>PULSA PARA INICIAR SISTEMAS</p>
+  </div>
 
-    // Anillos pulsantes
-    for (var i = 0; i < 3; i++) {
-      var ringR = radius + 10 + i * 8 + Math.sin(t * 0.08 + i) * 2.5;
+  <div id="mainColumn">
+    <h1>J.A.R.V.I.S</h1>
+    <div class="subtitle">Powered by Gemini · Apps Script</div>
+
+    <div id="orbWrap">
+      <canvas id="orbCanvas" width="300" height="190"></canvas>
+      <div id="stateLabel">En reposo</div>
+    </div>
+
+    <div id="chatBox"></div>
+
+    <div class="controls">
+      <input type="text" id="inputText" placeholder="Escribe o pulsa el micro..." onkeypress="if(event.key==='Enter') sendMessage()">
+      <button id="micBtn" onclick="toggleMic()">🎤</button>
+      <button onclick="sendMessage()">Enviar</button>
+    </div>
+    <div class="status" id="status">Listo</div>
+  </div>
+
+  <div id="sidePanel">
+    <div id="sidePanelHeader">
+      <span id="sidePanelTitle">Resultados</span>
+      <button id="sidePanelClose" onclick="closeSidePanel()">✕</button>
+    </div>
+    <div id="sidePanelBody"></div>
+  </div>
+
+  <script>
+    // ============================================================
+    // SONIDO DE ARRANQUE (sintetizado, sin copyright — no es la música de Iron Man)
+    // ============================================================
+    function playBootSound(ctx) {
+      const now = ctx.currentTime;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0, now);
+      masterGain.connect(ctx.destination);
+
+      // Barrido ascendente (0s - 2.8s)
+      const sweep = ctx.createOscillator();
+      sweep.type = 'sine';
+      sweep.frequency.setValueAtTime(140, now);
+      sweep.frequency.exponentialRampToValueAtTime(720, now + 2.8);
+      const sweepGain = ctx.createGain();
+      sweepGain.gain.setValueAtTime(0, now);
+      sweepGain.gain.linearRampToValueAtTime(0.15, now + 0.4);
+      sweepGain.gain.linearRampToValueAtTime(0.08, now + 2.8);
+      sweep.connect(sweepGain);
+      sweepGain.connect(masterGain);
+      sweep.start(now);
+      sweep.stop(now + 2.9);
+
+      // Un segundo tono más grave por debajo, para dar cuerpo
+      const sub = ctx.createOscillator();
+      sub.type = 'triangle';
+      sub.frequency.setValueAtTime(70, now);
+      sub.frequency.exponentialRampToValueAtTime(180, now + 2.8);
+      const subGain = ctx.createGain();
+      subGain.gain.setValueAtTime(0, now);
+      subGain.gain.linearRampToValueAtTime(0.1, now + 0.4);
+      subGain.gain.linearRampToValueAtTime(0.04, now + 2.8);
+      sub.connect(subGain);
+      subGain.connect(masterGain);
+      sub.start(now);
+      sub.stop(now + 2.9);
+
+      // Acorde tipo "power-up" al final (2.6s - 5s)
+      const chordFreqs = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+      chordFreqs.forEach(function(freq, i) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + 2.6);
+        const g = ctx.createGain();
+        const startT = now + 2.6 + i * 0.08;
+        g.gain.setValueAtTime(0, startT);
+        g.gain.linearRampToValueAtTime(0.09, startT + 0.15);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 5);
+        osc.connect(g);
+        g.connect(masterGain);
+        osc.start(startT);
+        osc.stop(now + 5.1);
+      });
+
+      // Envolvente general (evita clicks al principio/final)
+      masterGain.gain.linearRampToValueAtTime(1, now + 0.05);
+      masterGain.gain.setValueAtTime(1, now + 4.7);
+      masterGain.gain.linearRampToValueAtTime(0, now + 5);
+    }
+
+    function bootUp() {
+      const overlay = document.getElementById('bootOverlay');
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      playBootSound(ctx);
+
+      // El orbe "respira" con más intensidad durante el arranque
+      setOrbState('thinking');
+      setTimeout(function() { setOrbState('idle'); }, 5000);
+
+      overlay.style.opacity = '0';
+      setTimeout(function() {
+        overlay.style.display = 'none';
+      }, 600);
+    }
+
+    // ============================================================
+    // NÚCLEO ANIMADO (canvas)
+    // ============================================================
+    const canvas = document.getElementById('orbCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const CX = W / 2, CY = H / 2;
+
+    // Estados: 'idle', 'listening', 'thinking', 'speaking'
+    let orbState = 'idle';
+    let speakAmplitude = 0; // 0-1, modulado por onboundary del TTS
+    let targetAmplitude = 0;
+    let t = 0;
+
+    const STATE_COLORS = {
+      idle:      { r: 0,   g: 160, b: 200 },
+      listening: { r: 20,  g: 60,  b: 90  }, // atenuado: la "voz" real la lleva la burbuja del micro
+      thinking:  { r: 255, g: 170, b: 40  },
+      speaking:  { r: 0,   g: 212, b: 255 }
+    };
+
+    function setOrbState(state) {
+      orbState = state;
+      const labels = { idle: 'En reposo', listening: 'Escuchando', thinking: 'Procesando', speaking: 'Hablando' };
+      document.getElementById('stateLabel').textContent = labels[state] || state;
+    }
+
+    function drawOrb() {
+      ctx.clearRect(0, 0, W, H);
+      const c = STATE_COLORS[orbState];
+      const colorStr = 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')';
+
+      // Suavizar amplitud hacia el objetivo
+      speakAmplitude += (targetAmplitude - speakAmplitude) * 0.15;
+      targetAmplitude *= 0.9; // decaimiento natural
+
+      let baseRadius = 42;
+      let pulse = 0;
+
+      if (orbState === 'idle') {
+        pulse = Math.sin(t * 0.03) * 4;
+      } else if (orbState === 'listening') {
+        pulse = Math.sin(t * 0.25) * 8 + speakAmplitude * 20;
+      } else if (orbState === 'thinking') {
+        pulse = Math.sin(t * 0.15) * 6;
+      } else if (orbState === 'speaking') {
+        pulse = speakAmplitude * 22 + Math.sin(t * 0.2) * 3;
+      }
+
+      const radius = baseRadius + pulse;
+
+      // Anillos exteriores rotando
+      const ringCount = 3;
+      for (let i = 0; i < ringCount; i++) {
+        const ringRadius = radius + 20 + i * 16;
+        const rotSpeed = orbState === 'thinking' ? 0.04 : 0.015;
+        const dir = i % 2 === 0 ? 1 : -1;
+        const startAngle = t * rotSpeed * dir + i * 2;
+
+        ctx.beginPath();
+        ctx.strokeStyle = colorStr;
+        ctx.globalAlpha = 0.18 - i * 0.04;
+        ctx.lineWidth = 1.5;
+        ctx.arc(CX, CY, ringRadius, startAngle, startAngle + Math.PI * 1.3);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // Halo (glow)
+      const gradient = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius * 2.2);
+      gradient.addColorStop(0, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0.35)');
+      gradient.addColorStop(1, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0)');
+      ctx.fillStyle = gradient;
       ctx.beginPath();
-      ctx.strokeStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + (0.22 - i * 0.06) + ')';
-      ctx.lineWidth = 2;
-      ctx.arc(CX, CY, ringR, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.arc(CX, CY, radius * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Núcleo central
+      const coreGradient = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius);
+      coreGradient.addColorStop(0, '#ffffff');
+      coreGradient.addColorStop(0.3, colorStr);
+      coreGradient.addColorStop(1, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0.15)');
+      ctx.fillStyle = coreGradient;
+      ctx.beginPath();
+      ctx.arc(CX, CY, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Puntitos orbitando (partículas)
+      const particleCount = 6;
+      for (let i = 0; i < particleCount; i++) {
+        const angle = (t * 0.02) + (i * (Math.PI * 2 / particleCount));
+        const orbitRadius = radius + 34;
+        const px = CX + Math.cos(angle) * orbitRadius;
+        const py = CY + Math.sin(angle) * orbitRadius * 0.6; // elipse
+        ctx.beginPath();
+        ctx.fillStyle = colorStr;
+        ctx.globalAlpha = 0.7;
+        ctx.arc(px, py, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      t++;
+      requestAnimationFrame(drawOrb);
     }
+    drawOrb();
 
-    // Halo
-    var grad = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius * 2);
-    grad.addColorStop(0, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.4)');
-    grad.addColorStop(1, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(CX, CY, radius * 2, 0, Math.PI * 2);
-    ctx.fill();
+    // ============================================================
+    // RECONOCIMIENTO DE VOZ (vía ventana emergente externa, porque el
+    // iframe de Apps Script bloquea el acceso directo al micrófono)
+    // ============================================================
+    let history = [];
+    let listening = false;
+    let micPopup = null;
 
-    // Núcleo
-    var core = ctx.createRadialGradient(CX, CY, 0, CX, CY, radius);
-    core.addColorStop(0, '#ffffff');
-    core.addColorStop(0.35, 'rgb(' + color.r + ',' + color.g + ',' + color.b + ')');
-    core.addColorStop(1, 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',0.2)');
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.arc(CX, CY, radius, 0, Math.PI * 2);
-    ctx.fill();
+    const MIC_HELPER_URL = 'https://mrclouder.github.io/-jarvis-mic/';
 
-    t++;
-    if (state === 'listening') {
-      requestAnimationFrame(draw);
-    }
-  }
-  draw();
+    // Escucha el mensaje que manda la ventana emergente cuando termina de transcribir
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'jarvis-voice') {
+        listening = false;
+        document.getElementById('micBtn').classList.remove('listening');
+        setOrbState('idle');
+        setStatus('Listo');
+        document.getElementById('inputText').value = event.data.text;
+        sendMessage();
+      }
+    });
 
-  var recognition = null;
-  var finalTranscript = '';
-  var silenceTimer = null;
-  var SILENCE_MS = 2800;   // pausa tolerada entre palabras/frases antes de dar por terminado
-  var INITIAL_GRACE_MS = 6000; // tiempo de gracia inicial si aún no ha dicho nada
-
-  if ('webkitSpeechRecognition' in window) {
-    recognition = new webkitSpeechRecognition();
-    recognition.lang = 'es-ES';
-    recognition.continuous = true;      // no corta en la primera pausa
-    recognition.interimResults = true;
-
-    function resetSilenceTimer(ms) {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(finishAndSend, ms);
-    }
-
-    function finishAndSend() {
-      if (state !== 'listening') return;
-      state = 'done';
-      try { recognition.stop(); } catch (e) {}
-
-      var text = finalTranscript.trim();
-      if (!text) {
-        statusEl.textContent = 'NO SE DETECTÓ VOZ';
-        setTimeout(function() { window.close(); }, 1000);
+    function toggleMic() {
+      if (listening) {
+        if (micPopup && !micPopup.closed) micPopup.close();
+        listening = false;
+        document.getElementById('micBtn').classList.remove('listening');
+        setOrbState('idle');
+        setStatus('Listo');
         return;
       }
-      statusEl.textContent = 'ENVIANDO...';
-      if (window.opener) {
-        window.opener.postMessage({ type: 'jarvis-voice', text: text }, '*');
-      }
-      setTimeout(function() { window.close(); }, 400);
-    }
 
-    recognition.onresult = function(event) {
-      var interim = '';
-      for (var i = event.resultIndex; i < event.results.length; i++) {
-        var transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-        } else {
-          interim += transcript;
+      const popupWidth = 170;
+      const popupHeight = 190;
+      const left = window.screenX + 20;
+      const top = window.screenY + 20;
+      const features = 'width=' + popupWidth + ',height=' + popupHeight +
+        ',left=' + Math.round(left) + ',top=' + Math.round(top) +
+        ',toolbar=no,menubar=no,location=no,status=no,scrollbars=no,resizable=no';
+
+      micPopup = window.open(MIC_HELPER_URL, 'jarvis_mic', features);
+
+      if (!micPopup) {
+        alert('El navegador bloqueó la ventana emergente. Permite pop-ups para este sitio y vuelve a intentarlo.');
+        return;
+      }
+
+      listening = true;
+      document.getElementById('micBtn').classList.add('listening');
+      setOrbState('listening');
+      setStatus('Escuchando en ventana emergente...');
+
+      // Si el usuario cierra la ventana manualmente sin hablar, resetea el estado
+      const checkClosed = setInterval(function() {
+        if (micPopup.closed) {
+          clearInterval(checkClosed);
+          listening = false;
+          document.getElementById('micBtn').classList.remove('listening');
+          setOrbState('idle');
+          setStatus('Listo');
         }
-      }
-      transcriptEl.textContent = (finalTranscript + interim).trim();
-      resetSilenceTimer(SILENCE_MS); // cada vez que detecta algo, alarga el plazo
-    };
+      }, 500);
+    }
 
-    recognition.onerror = function(e) {
-      if (e.error === 'no-speech') {
-        // Chrome a veces dispara esto de forma espuria en modo continuo; lo ignoramos y seguimos
-        return;
-      }
-      state = 'error';
-      statusEl.textContent = 'ERROR: ' + e.error;
-      setTimeout(function() { window.close(); }, 2000);
-    };
+    // ============================================================
+    // SÍNTESIS DE VOZ (ElevenLabs, con reactividad real del orbe)
+    // ============================================================
+    let audioCtx = null;
+    let analyser = null;
+    let audioDataArray = null;
+    let currentAudioEl = null;
+    let visualizeLoopActive = false;
 
-    recognition.onend = function() {
-      // Si el navegador la para sola (p. ej. límite interno) y aún estábamos escuchando, cerramos con lo que tengamos
-      if (state === 'listening') {
-        finishAndSend();
+    function ensureAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
-    };
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
 
-    // Arranca automáticamente, sin necesitar clic
-    recognition.start();
-    resetSilenceTimer(INITIAL_GRACE_MS);
-  } else {
-    statusEl.textContent = 'NO SOPORTADO EN ESTE NAVEGADOR';
-  }
-})();
-</script>
+    function visualizeAudioLoop() {
+      if (!visualizeLoopActive || !analyser) return;
+      analyser.getByteFrequencyData(audioDataArray);
+      // Promedio de las frecuencias medias/bajas (donde vive la voz)
+      let sum = 0;
+      const range = Math.min(audioDataArray.length, 48);
+      for (let i = 0; i < range; i++) sum += audioDataArray[i];
+      const avg = sum / range / 255; // normalizado 0-1
+      targetAmplitude = avg;
+      requestAnimationFrame(visualizeAudioLoop);
+    }
+
+    function speak(text) {
+      setOrbState('thinking'); // mientras se genera el audio
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!result || !result.success) {
+            console.warn('ElevenLabs falló, usando voz del navegador de respaldo:', result && result.error);
+            speakFallbackBrowser(text);
+            return;
+          }
+          playAudioFromBase64(result.audioBase64, result.mimeType);
+        })
+        .withFailureHandler(function(err) {
+          console.warn('Error llamando a synthesizeSpeech, usando voz del navegador:', err);
+          speakFallbackBrowser(text);
+        })
+        .synthesizeSpeech(text);
+    }
+
+    function playAudioFromBase64(base64, mimeType) {
+      ensureAudioContext();
+
+      const audioSrc = 'data:' + mimeType + ';base64,' + base64;
+      const audioEl = new Audio(audioSrc);
+      currentAudioEl = audioEl;
+
+      // Conectar al analizador para amplitud real
+      const source = audioCtx.createMediaElementSource(audioEl);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+      audioDataArray = new Uint8Array(analyser.frequencyBinCount);
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      audioEl.onplay = function() {
+        setOrbState('speaking');
+        visualizeLoopActive = true;
+        visualizeAudioLoop();
+      };
+      audioEl.onended = function() {
+        visualizeLoopActive = false;
+        setOrbState('idle');
+      };
+      audioEl.onerror = function() {
+        visualizeLoopActive = false;
+        setOrbState('idle');
+      };
+
+      audioEl.play();
+    }
+
+    // Respaldo por si ElevenLabs no está configurado o falla
+    function speakFallbackBrowser(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'es-ES';
+      utterance.rate = 1.05;
+      utterance.onstart = function() { setOrbState('speaking'); };
+      utterance.onboundary = function() { targetAmplitude = 1; };
+      utterance.onend = function() { setOrbState('idle'); };
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // ============================================================
+    // PANEL LATERAL DE RESULTADOS
+    // ============================================================
+    function closeSidePanel() {
+      document.getElementById('sidePanel').classList.remove('visible');
+    }
+
+    function formatDateShort(iso) {
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return iso;
+      }
+    }
+
+    function renderSidePanel(panel) {
+      if (!panel || !panel.items || panel.items.length === 0) {
+        return; // sin datos, dejamos el panel como estaba (o cerrado)
+      }
+
+      const sidePanel = document.getElementById('sidePanel');
+      const body = document.getElementById('sidePanelBody');
+      const title = document.getElementById('sidePanelTitle');
+      body.innerHTML = '';
+
+      if (panel.type === 'events') {
+        title.textContent = 'Eventos (' + panel.items.length + ')';
+        panel.items.forEach(function(ev) {
+          const card = document.createElement('div');
+          card.className = 'panelCard';
+          card.innerHTML =
+            '<div class="cardTitle">' + escapeHtml(ev.title) + '</div>' +
+            '<div class="cardMeta">' + formatDateShort(ev.start) + (ev.location ? ' · ' + escapeHtml(ev.location) : '') + '</div>' +
+            '<div class="cardActions"><button class="cancelBtn">Cancelar</button></div>';
+
+          const cancelBtn = card.querySelector('.cancelBtn');
+          cancelBtn.addEventListener('click', function() {
+            if (!ev.eventId) {
+              alert('Este evento no tiene ID disponible para cancelarlo desde aquí.');
+              return;
+            }
+            if (!confirm('¿Cancelar "' + ev.title + '"?')) return;
+            cancelBtn.textContent = 'Cancelando...';
+            cancelBtn.disabled = true;
+            google.script.run
+              .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                  card.classList.add('removed');
+                  cancelBtn.textContent = 'Cancelado';
+                } else {
+                  cancelBtn.textContent = 'Error';
+                  alert('No se pudo cancelar: ' + (result && result.error));
+                }
+              })
+              .withFailureHandler(function(err) {
+                cancelBtn.textContent = 'Error';
+                alert('Error: ' + err.message);
+              })
+              .deleteCalendarEvent({ eventId: ev.eventId });
+          });
+
+          body.appendChild(card);
+        });
+      } else if (panel.type === 'emails') {
+        title.textContent = 'Correos (' + panel.items.length + ')';
+        panel.items.forEach(function(mail) {
+          const card = document.createElement('div');
+          card.className = 'panelCard';
+          card.innerHTML =
+            '<div class="cardTitle">' + escapeHtml(mail.subject || '(sin asunto)') + '</div>' +
+            '<div class="cardMeta">' + escapeHtml(mail.from) + ' · ' + formatDateShort(mail.date) + '</div>' +
+            '<div style="margin-top:6px; color:#8aa8bc;">' + escapeHtml((mail.snippet || '').substring(0, 100)) + '…</div>';
+          body.appendChild(card);
+        });
+      }
+
+      sidePanel.classList.add('visible');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str == null ? '' : str;
+      return div.innerHTML;
+    }
+
+    // ============================================================
+    // CHAT
+    // ============================================================
+    function addMessage(text, sender) {
+      const box = document.getElementById('chatBox');
+      const div = document.createElement('div');
+      div.className = 'msg ' + sender;
+      div.textContent = text;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function setStatus(text) {
+      document.getElementById('status').textContent = text;
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('inputText');
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage(text, 'user');
+      input.value = '';
+      setStatus('JARVIS está pensando...');
+      setOrbState('thinking');
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+          const responseText = (typeof result === 'object' && result !== null) ? result.response : result;
+          addMessage(responseText, 'jarvis');
+          speak(responseText);
+          history.push({ role: 'user', text: text });
+          history.push({ role: 'model', text: responseText });
+          setStatus('Listo');
+
+          if (typeof result === 'object' && result !== null && result.panel) {
+            renderSidePanel(result.panel);
+          }
+        })
+        .withFailureHandler(function(error) {
+          addMessage('Error: ' + error.message, 'jarvis');
+          setStatus('Error');
+          setOrbState('idle');
+        })
+        .askJarvis(text, history);
+    }
+
+    // Mensaje inicial
+    addMessage('Hola, soy JARVIS. ¿En qué puedo ayudarte?', 'jarvis');
+  </script>
+</body>
+</html>
